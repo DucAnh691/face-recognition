@@ -1,25 +1,17 @@
-# Python cache
+
+venv/
+.env/
+
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Virtual environment
-venv/
-.env/
-
-# VSCode
-.vscode/
-
-# Logs
 *.log
+*.sqlite3
 
-# Data/model lớn (tùy chọn)
-*.pth
-*.pt
-*.h5
-*.ckpt
+captures/
+*.jpg
+*.png
 
-# OS
-.DS_Store
-Thumbs.db
+.vscode/
