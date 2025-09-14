@@ -1,187 +1,165 @@
-# --- QUAN TRỌNG: Đặt biến môi trường để sử dụng TCP cho RTSP ---
-# Phải đặt trước khi import cv2 để có hiệu lực
 import os
-os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
-
-# Import necessary libraries
 import cv2
 import torch
 import time
-from datetime import datetime
 import threading
+from datetime import datetime
 from transformers import pipeline
 from PIL import Image
 
-# --- Class để đọc video trong luồng riêng, giảm độ trễ ---
+# ==========================================
+# Cấu hình chung
+# ==========================================
+os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
+
+USE_IP_CAMERA = True
+RTSP_URL = "rtsp://admin:2025@EtonCam@192.168.60.1:554/Streaming/Channels/2802"
+
+CAPTURE_DIR = "captures"
+os.makedirs(CAPTURE_DIR, exist_ok=True)
+
+CAPTURE_COOLDOWN = 5          # giây, thời gian chờ giữa 2 lần chụp
+PROCESS_EVERY_N_FRAMES = 1    # xử lý mỗi N frame
+SCALE_FACTOR = 1.0            # resize frame trước khi detect
+CONFIDENCE_THRESHOLD = 0.9    # ngưỡng tin cậy tối thiểu
+MOTION_THRESHOLD = 30         # ngưỡng điểm ảnh để xác định có chuyển động
+
+# ==========================================
+# Class đọc video stream trong thread riêng
+# ==========================================
 class VideoStreamWidget:
+    """Đọc video từ camera trong một thread riêng để giảm độ trễ."""
     def __init__(self, src=0):
-        # Sử dụng cv2.CAP_FFMPEG để hỗ trợ tốt hơn cho các luồng mạng
         self.capture = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
         if not self.capture.isOpened():
-            print(f"Lỗi: Không thể mở nguồn video: {src}")
+            print(f"[ERROR] Không thể mở video source: {src}")
             self.status = False
             return
 
-        # Bắt đầu luồng để đọc các khung hình từ video stream
         self.status, self.frame = self.capture.read()
-        self.thread = threading.Thread(target=self.update, args=())
-        self.thread.daemon = True
+        self.thread = threading.Thread(target=self.update, daemon=True)
         self.thread.start()
 
     def update(self):
-        # Đọc khung hình tiếp theo trong một luồng riêng
+        """Liên tục đọc frame từ camera."""
         while True:
             if self.capture.isOpened():
-                (self.status, self.frame) = self.capture.read()
-            time.sleep(.01) # Giảm tải CPU
+                self.status, self.frame = self.capture.read()
+            time.sleep(0.01)  # giảm tải CPU
 
     def read(self):
-        # Trả về khung hình gần nhất
+        """Trả về frame mới nhất."""
         return self.status, self.frame
 
 
-# Load the face detection pipeline
-# Kiểm tra xem có GPU (CUDA) không và sử dụng nếu có
-device = 0 if torch.cuda.is_available() else -1
-print(f"Using device: {'GPU' if device == 0 else 'CPU'}")
+# ==========================================
+# Load model phát hiện đối tượng
+# ==========================================
+if torch.cuda.is_available():
+    device = 0
+    gpu_name = torch.cuda.get_device_name(0)
+    print(f"[INFO] Phát hiện GPU: {gpu_name}, sẽ chạy trên GPU.")
+else:
+    device = -1
+    print("[INFO] Không có GPU, sẽ chạy trên CPU.")
 
-# Sử dụng model yolos-tiny nhẹ hơn và chuyên cho phát hiện đối tượng
-# Sử dụng model lớn hơn để tăng độ chính xác, không ưu tiên tốc độ
-# face_detector = pipeline("object-detection", model="hustvl/yolos-tiny", device=device)
-face_detector = pipeline("object-detection", model="facebook/detr-resnet-101", device=device)
+face_detector = pipeline(
+    "object-detection",
+    model="facebook/detr-resnet-101",
+    device=device
+)
 
 
+# ==========================================
+# Hàm nhận diện real-time
+# ==========================================
 def recognize_faces_realtime():
     """
-    Recognizes faces from a webcam in real-time and displays the output.
+    Nhận diện người trong video stream (webcam hoặc camera IP).
+    Khi phát hiện có người + chuyển động, lưu ảnh vào thư mục captures/.
     """
-    # --- Cấu hình Camera ---
-    # Để sử dụng webcam, đặt USE_IP_CAMERA = False
-    # Để sử dụng camera IP, đặt USE_IP_CAMERA = True và điền thông tin rtsp_url
-    USE_IP_CAMERA = True
-
-    # URL RTSP cho camera IP (ví dụ cho Hikvision)
-    # !!! QUAN TRỌNG: Thay thế <user> và <password> bằng thông tin đăng nhập chính xác của bạn.
-    # rtsp://<user>:<password>@<ip_address>:<port>/Streaming/Channels/<channel_id>
-    # Thử dùng luồng phụ (sub-stream) '2402' để nhẹ hơn và ổn định hơn
-    # Ví dụ của bạn:
-    # rtsp_url = "rtsp://admin:YourCorrectPassword@192.168.60.1:554/Streaming/Channels/2701"
-    rtsp_url = "rtsp://admin:2025@EtonCam@192.168.60.2:554/Streaming/Channels/1102"  # <-- SỬA DÒNG NÀY
-
-    if USE_IP_CAMERA:
-        video_stream = VideoStreamWidget(rtsp_url)
-    else:
-        # Mở webcam mặc định (chỉ số 0)
-        video_stream = VideoStreamWidget(0)
+    src = RTSP_URL if USE_IP_CAMERA else 0
+    video_stream = VideoStreamWidget(src)
 
     if not video_stream.capture.isOpened():
-        print(f"Lỗi: Không thể mở nguồn video. Vui lòng kiểm tra lại cấu hình camera.")
+        print("[ERROR] Không thể mở camera. Kiểm tra lại cấu hình.")
         return
-    
-    # --- Cấu hình cho việc chụp ảnh ---
-    CAPTURE_DIR = "captures"
-    os.makedirs(CAPTURE_DIR, exist_ok=True)
-    # Thời gian chờ (giây) giữa các lần chụp ảnh để tránh lưu quá nhiều file
-    CAPTURE_COOLDOWN = 5  # 5 giây
+
+    print("[INFO] Đang chạy... Nhấn 'q' để thoát.")
+
     last_capture_time = 0
-
-    print("Đang mở webcam... Nhấn 'q' trên cửa sổ video để thoát.")
-
     frame_count = 0
-    # Chỉ xử lý mỗi 3 khung hình để tăng hiệu suất
-    PROCESS_EVERY_N_FRAMES = 1  # Xử lý mọi khung hình để có độ chính xác cao nhất
-    # Giảm kích thước khung hình để xử lý nhanh hơn
-    SCALE_FACTOR = 1.0  # Sử dụng kích thước gốc để không bỏ lỡ chi tiết
-    
-    # Khởi tạo detections để tránh lỗi UnboundLocalError
+    previous_frame_gray = None
     detections = []
 
-    # --- Cấu hình bộ lọc để tăng độ chính xác ---
-    CONFIDENCE_THRESHOLD = 0.9  # Ngưỡng tin cậy cao cho model chính xác hơn
-    # MIN_AREA_PERCENT đã được loại bỏ để không lọc mất các đối tượng nhỏ
-
-    # --- Cấu hình phát hiện chuyển động ---
-    previous_frame_gray = None
-    MOTION_THRESHOLD = 30  # Ngưỡng để xác định có chuyển động trong bounding box
-
     while True:
-        # Đọc từng khung hình từ webcam
         ret, frame = video_stream.read()
         if not ret:
-            print("Lỗi: Không thể nhận khung hình.")
+            print("[ERROR] Không thể đọc frame.")
             break
 
-        # Tạo một bản sao của khung hình để vẽ lên, tránh ảnh hưởng đến khung hình gốc
-        # được sử dụng trong các lần lặp tiếp theo (khi bỏ qua frame)
         display_frame = frame.copy()
-
-        # Lấy kích thước khung hình để tính toán diện tích tối thiểu
         current_frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         current_frame_gray = cv2.GaussianBlur(current_frame_gray, (21, 21), 0)
 
         motion_detected_in_frame = False
-
         frame_count += 1
-        if frame_count % PROCESS_EVERY_N_FRAMES == 0:
-            # Giảm kích thước khung hình
-            small_frame = cv2.resize(frame, (0, 0), fx=SCALE_FACTOR, fy=SCALE_FACTOR)
 
-            # Chuyển đổi sang PIL Image để đưa vào model
+        # Detect mỗi N frame
+        if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+            small_frame = cv2.resize(frame, (0, 0), fx=SCALE_FACTOR, fy=SCALE_FACTOR)
             pil_image = Image.fromarray(cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB))
-            
-            # Phát hiện đối tượng
             detections = face_detector(pil_image)
 
-        # So sánh với khung hình trước để phát hiện chuyển động
+        # Phát hiện chuyển động
         if previous_frame_gray is not None:
             frame_delta = cv2.absdiff(previous_frame_gray, current_frame_gray)
-            thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+            _, thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)
             motion_detected_in_frame = thresh.sum() > 0
 
-        # Vẽ các hộp bao quanh đối tượng được phát hiện (vẽ trên mọi frame để video mượt hơn)
+        # Vẽ bounding box
         for detection in detections:
-            box = detection["box"]
-            label = detection["label"]
-            score = detection["score"]
+            box, label, score = detection["box"], detection["label"], detection["score"]
 
-            # Áp dụng các bộ lọc để tăng độ chính xác
-            if label == "person" and score > CONFIDENCE_THRESHOLD: # Lọc theo độ tin cậy
-                # Quy đổi tọa độ về kích thước khung hình gốc
-                (xmin, ymin, xmax, ymax) = (int(box["xmin"] / SCALE_FACTOR), int(box["ymin"] / SCALE_FACTOR),
-                                            int(box["xmax"] / SCALE_FACTOR), int(box["ymax"] / SCALE_FACTOR))
-                
-                # Chỉ xử lý nếu có chuyển động trong khung hình
+            if label == "person" and score > CONFIDENCE_THRESHOLD:
+                xmin, ymin, xmax, ymax = map(int, (
+                    box["xmin"] / SCALE_FACTOR,
+                    box["ymin"] / SCALE_FACTOR,
+                    box["xmax"] / SCALE_FACTOR,
+                    box["ymax"] / SCALE_FACTOR
+                ))
+
                 if motion_detected_in_frame:
-                    # Kiểm tra xem có chuyển động bên trong bounding box không
                     roi_motion = thresh[ymin:ymax, xmin:xmax]
                     motion_in_box = cv2.countNonZero(roi_motion) > MOTION_THRESHOLD if roi_motion.size > 0 else False
 
                     if motion_in_box:
                         cv2.rectangle(display_frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
-                        cv2.putText(display_frame, f"Person: {score:.2f}", (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        
-                        # Tác vụ chụp ảnh (chỉ khi tất cả điều kiện đều đúng)
+                        cv2.putText(display_frame, f"Person: {score:.2f}", (xmin, ymin - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+                        # Lưu ảnh
                         current_time = time.time()
                         if current_time - last_capture_time > CAPTURE_COOLDOWN:
                             last_capture_time = current_time
-                            timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
-                            capture_path = os.path.join(CAPTURE_DIR, f"capture_{timestamp_str}.jpg")
+                            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+                            capture_path = os.path.join(CAPTURE_DIR, f"capture_{timestamp}.jpg")
                             cv2.imwrite(capture_path, display_frame)
-                            print(f"Đã phát hiện người và lưu ảnh tại: {capture_path}")
-        
-        # Hiển thị khung hình đã xử lý
-        cv2.imshow('Real-time Face Detection', display_frame)
-        
-        # Nhấn 'q' để thoát
+                            print(f"[INFO] Ảnh lưu tại: {capture_path}")
+
+        cv2.imshow('Real-time Detection', display_frame)
+
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-        # Cập nhật khung hình trước đó
         previous_frame_gray = current_frame_gray
-    
-    # Giải phóng webcam và đóng tất cả cửa sổ
+
     video_stream.capture.release()
     cv2.destroyAllWindows()
 
+
+# ==========================================
+# Main
+# ==========================================
 if __name__ == "__main__":
     recognize_faces_realtime()

@@ -3,7 +3,7 @@
 Dự án nhận diện khuôn mặt sử dụng HuggingFace và OpenCV.
 
 ## 🚀 Yêu cầu hệ thống
-- Python 3.9+ (khuyến nghị dùng Python 3.10)
+- Python 3.12.3 
 - pip (trình quản lý gói Python)
 - Git
 
