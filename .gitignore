@@ -9,8 +9,4 @@ __pycache__/
 *.log
 *.sqlite3
 
-captures/
-*.jpg
-*.png
-
 .vscode/
