@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env/
+
+# VSCode
+.vscode/
+
+# Logs
+*.log
+
+# Data/model lớn (tùy chọn)
+*.pth
+*.pt
+*.h5
+*.ckpt
+
+# OS
+.DS_Store
+Thumbs.db
