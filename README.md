@@ -8,20 +8,20 @@ Dự án nhận diện khuôn mặt sử dụng HuggingFace và OpenCV.
 - Git
 
 ## 📥 Clone project
-git clone https://gitlab.eton.vn/anh.levanduc/face-recognition.git
-cd face-recognition
+- git clone https://gitlab.eton.vn/anh.levanduc/face-recognition.git
+- cd face-recognition
 
 # 🛠️Tạo môi trường ảo (khuyến nghị)
-python -m venv venv
+- python -m venv venv
 ## Kích hoạt venv
 ## Windows
-venv\Scripts\activate
+- venv\Scripts\activate
 ## Linux / MacOS
-source venv/bin/activate
+- source venv/bin/activate
 
 # 📦Cài đặt dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+- pip install --upgrade pip
+- pip install -r requirements.txt
 
 # ▶️Chạy ứng dụng
-python app.py
+- python app.py
