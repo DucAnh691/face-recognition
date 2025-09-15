@@ -47,32 +47,31 @@ Trước khi bắt đầu, hãy đảm bảo bạn đã cài đặt **Git** và 
 
 ### Bước 1: Clone repo
 
-git clone https://gitlab.eton.vn/anh.levanduc/face-recognition.git
-cd face-recognition
-```
+- git clone https://gitlab.eton.vn/anh.levanduc/face-recognition.git
+- cd face-recognition
+
 
 ### Bước 2: Tạo và kích hoạt môi trường ảo
 
 
 1.  **Tạo môi trường ảo** (đặt tên là `venv`):
-    ```sh
+    
     python -m venv venv
-    ```
+    
 2.  **Kích hoạt môi trường ảo**:
     -   Trên **Windows** (dùng Command Prompt hoặc PowerShell):
-        ```sh
+        
         venv\Scripts\activate
-        ```
+        
     -   Trên **Linux** hoặc **macOS**:
-        ```sh
+        
         source venv/bin/activate
-        ```
+        
 
 ### Bước 3: Cài đặt các thư viện
 
-```sh
 pip install -r requirements.txt
-```
+
 
 ## ⚙️ Cấu hình hệ thống
 
@@ -87,9 +86,8 @@ pip install -r requirements.txt
 
 ## ▶️ Khởi chạy
 
-```sh
 python app.py
-```
+
 
 **Khi chương trình chạy:**
 -   Các cửa sổ tương ứng với mỗi camera sẽ hiện lên, hiển thị video stream và các đối tượng được phát hiện.
