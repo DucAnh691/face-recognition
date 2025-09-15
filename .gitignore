@@ -6,6 +6,9 @@ __pycache__/
 *.pyo
 *.pyd
 
+*.png
+*.jpg
+
 *.log
 *.sqlite3
 

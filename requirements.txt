@@ -1,6 +1,3 @@
-transformers
-torch
-torchvision
+ultralytics
 opencv-python
-moviepy
-timm
+

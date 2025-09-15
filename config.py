@@ -20,17 +20,15 @@ RTSP_URLS = [
 # ==========================================
 CAPTURE_DIR = "captures"
 os.makedirs(CAPTURE_DIR, exist_ok=True)
-CAPTURE_COOLDOWN = 5  # giây, thời gian chờ giữa 2 lần chụp
+CAPTURE_COOLDOWN = 10  # giây, thời gian chờ giữa 2 lần chụp
 
 # ==========================================
 # Detection Config
 # ==========================================
-BATCH_SIZE = 8  # Tăng lên bằng số lượng camera
-MAX_QUEUE_SIZE = 20 # Tăng kích thước hàng đợi để có thêm bộ đệm
-PROCESS_EVERY_N_FRAMES = 5 # Chỉ xử lý AI mỗi 5 frame, giảm tải 80%
-SCALE_FACTOR = 1.0
-CONFIDENCE_THRESHOLD = 0.9
-MOTION_THRESHOLD = 10 # Giảm ngưỡng để nhạy hơn với chuyển động nhỏ
+# Xử lý AI mỗi N khung hình để giảm tải CPU.
+PROCESS_EVERY_N_FRAMES = 10 # Tăng lên để giảm tải CPU hơn nữa
+CONFIDENCE_THRESHOLD = 0.7 # Chỉ xử lý và vẽ đối tượng có độ tin cậy >= 70%
+# MOTION_THRESHOLD không còn cần thiết
 
 # ==========================================
 # Logging Config
